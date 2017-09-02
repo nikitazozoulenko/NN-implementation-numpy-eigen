@@ -74,13 +74,13 @@ layer_BN = Layer(function = "BN",
 
 
 layers = [layer_1,
-        #  layer_relu,
+          layer_BN,
           layer_2,
-        #  layer_relu,
+          layer_BN,
           layer_3,
-        #  layer_relu,
+          layer_BN,
           layer_4,
-        #  layer_relu,
+          layer_BN,
           layer_conv3_n10]
 
 E_grad2 = [0]*(len(layers))
@@ -109,7 +109,7 @@ for i in range(60000):
 losses = []
 
 #settings
-batch_size = 4
+batch_size = 32
 epochs = 1000
 network = CNN(layers = layers, batch_size = batch_size, num_input_channels = image_data.shape[1],
               height = image_data.shape[2], width = image_data.shape[3])
@@ -124,7 +124,8 @@ for i in range(epochs):
     prediction = network.forward(X)
     #backwards pass
     dJdW = network.backprop(prediction, Y)
-    train_network(network=network, dJdW = dJdW, learning_rate = 0.001, mu = 0.9)
+
+    train_network(network=network, dJdW = dJdW, learning_rate = 0.0005, mu = 0.9)
 
     #Update Graph
     loss = -sum(Y*np.log(prediction+epsilon))

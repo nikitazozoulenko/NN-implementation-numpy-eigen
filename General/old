@@ -142,3 +142,65 @@ class CNN(object):
             ##TODO calculating 1 useless thing, check notes #TODO
 
         return dJdW
+
+
+
+
+        # x = self.X[i]
+        # R, D, H, W = x.shape
+        # dout = delta
+        # gamma = self.W[i][0]
+        # beta = self.W[i][1]
+        #
+        # eps = 0.0001
+        # mu = 1./R/W/H * np.sum(x, axis = (0,2,3)).reshape(1,D,1,1)
+        # xmu = x - mu
+        # sq = xmu ** 2
+        # var = 1./R/W/H * np.sum(sq, axis = (0,2,3)).reshape(1,D,1,1)
+        # sqrtvar = np.sqrt(var + eps)
+        # ivar = 1./sqrtvar
+        # xhat = xmu * ivar
+        #
+        #
+        #
+        # ###############START BACKPROP
+        # #step9
+        # dbeta = np.sum(dout, axis=(0,2,3)).reshape(1,D,1,1)
+        # dgammax = dout #not necessary, but more understandable
+        #
+        # #step8
+        # dgamma = np.sum(dgammax*xhat, axis=(0,2,3)).reshape(1,D,1,1)
+        # dxhat = dgammax * gamma
+        #
+        # #step7
+        # divar = np.sum(dxhat*xmu, axis=(0,2,3)).reshape(1,D,1,1)
+        # dxmu1 = dxhat * ivar
+        #
+        # #step6
+        # dsqrtvar = -1. /(sqrtvar**2) * divar
+        #
+        # #step5
+        # dvar = 0.5 * 1. /np.sqrt(var+eps) * dsqrtvar
+        #
+        # #step4
+        # dsq = 1. /R/W/H * np.ones((R,D,H,W)) * dvar
+        #
+        # #step3
+        # dxmu2 = 2 * xmu * dsq
+        #
+        # #step2
+        # dx1 = (dxmu1 + dxmu2)
+        # dmu = -1 * np.sum(dxmu1+dxmu2, axis=(0,2,3)).reshape(1,D,1,1)
+        #
+        # #step1
+        # dx2 = 1. /R * np.ones((R,D,H,W)) * dmu
+        #
+        # #step0
+        # dx = dx1 + dx2
+        #
+        # dJdW[i] = np.empty(self.W[i].shape)
+        # dJdW[i][0] = dgamma
+        # dJdW[i][1] = dbeta
+        #
+        # delta = dx
+        # BNdeltanum = np.copy(delta)

@@ -25,7 +25,7 @@ layer_1 = Layer(function = "convolution",
                 kernel_size = 4,
                 stride = 1,
                 pad = 0,
-                num_filters = 1)
+                num_filters = 2)
 
 layer_2 = Layer(function = "convolution",
                 kernel_size = 2,
@@ -96,27 +96,24 @@ for i in range(3):
 losses = []
 
 batch_size = X.shape[0]
-epochs = 30
+epochs = 1
 showten = False
 numbers = np.zeros(40320)
 for i in range(epochs):
     network = CNN(layers = layers, batch_size = batch_size, num_input_channels = X.shape[1], height = X.shape[2], width = X.shape[3])
     #forward and backwards pass
     prediction = network.forward(X)
-    TESTINGLAYER = 1;
+    TESTINGLAYER = 0;
     dJdW_num = network.compute_numerical_gradient(TESTINGLAYER, Y)
-    dJdW, remember = network.backprop(prediction, Y, dJdW_num[0])
-    numbers += remember
-    #delta_num = network.compute_numerical_delta_once_per_forward(TESTINGLAYER, Y)
+    dJdW= network.backprop(prediction, Y)
 
-    print("test start")
-    print("backprop")
-    print(dJdW[TESTINGLAYER])
-    print("num")
-    print(dJdW_num)
-    print("test done")
-    print(dJdW[TESTINGLAYER] / dJdW_num)
+    delta_num = network.compute_numerical_delta_once_per_forward(TESTINGLAYER, Y)
+
     #print("DELTA_NUM \n", delta_num)
+
+    print("djdwnum\n", dJdW_num)
+    print("backprop\n", dJdW[TESTINGLAYER])
+    print("test divide\n", dJdW_num/dJdW[TESTINGLAYER])
 
     ##MOMENTUM
     #learning_rate = 0.001

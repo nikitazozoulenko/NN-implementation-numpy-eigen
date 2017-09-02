@@ -71,8 +71,8 @@ class CNN(object):
             beta = self.W[i][1]
             R, D, W, H = x.shape
 
-            mean = np.mean(x, axis = (2,3)).reshape((R,D,1,1))
-            variance = np.mean((x-mean)**2, axis = (2,3)).reshape((R,D,1,1))
+            mean = np.mean(x, axis = (0,2,3)).reshape((1,D,1,1))
+            variance = np.mean((x-mean)**2, axis = (0,2,3)).reshape((1,D,1,1))
             xhat = (x-mean) / np.sqrt(variance + epsilon)
 
             self.X[i+1] = gamma * xhat + beta
@@ -90,6 +90,7 @@ class CNN(object):
     def backprop(self, prediction, actual_value):
         length = len(self.layers)
         dJdW = [None]*(length)
+        BNdeltanum = 0
 
         #hardcoded softmax
         delta = prediction - actual_value
@@ -108,6 +109,9 @@ class CNN(object):
                 #unflip 180 degrees
                 self.W[i] = self.W[i].transpose((0,1,3,2))
 
+                # ##TESTING BATCH SIZE DIVISION
+                # dJdW[i] /= self.batch_size
+
             elif(self.layers[i].function is "ReLU"):
                 delta = delta * relu_prime(self.X[i])
 
@@ -115,24 +119,26 @@ class CNN(object):
                 delta = delta * tanh_prime(self.X[i])
 
             elif(self.layers[i].function is "BN"):
+
+
                 h = self.X[i]
-                delta_shape = delta.shape
-                dy = delta#.transpose((0,1,3,2)).transpose(0,2,3,1).reshape(delta_shape)
+                R, D, W, H = h.shape
+
+                dy = delta
                 gamma = self.W[i][0]
                 beta = self.W[i][1]
-                R, D, W, H = h.shape
+
+                gamma = gamma.reshape(1,D,1,1)
 
                 eps = 0
                 N = R
                 mu = 1./N/W/H*np.sum(h, axis = (0,2,3)).reshape(1,D,1,1)
                 var = 1./N/W/H*np.sum((h-mu)**2, axis = (0,2,3)).reshape(1,D,1,1)
                 dbeta = np.sum(dy, axis=(0,2,3)).reshape(1,D,1,1)
-
                 dgamma = np.sum((h - mu) * (var + eps)**(-1. / 2.) * dy, axis=(0,2,3)).reshape(1,D,1,1)
                 dh = (1. / N /W /H) * gamma * (var + eps)**(-1. / 2.) * (N*W*H * dy - np.sum(dy, axis=(0,2,3)).reshape(1,D,1,1)
-                    - (h - mu) * (var + eps)**(-1.0) * np.sum(dy * (h - mu), axis=(0,2,3)).reshape(1,D,1,1))
+                   - (h - mu) * (var + eps)**(-1.0) * np.sum(dy * (h - mu), axis=(0,2,3)).reshape(1,D,1,1))
 
-                #DELTA IS PROBABLY SHAPED WRONG ||||||OR PROBABLY NOT
                 dJdW[i] = np.empty(self.W[i].shape)
 
                 dJdW[i][0] = dgamma
@@ -146,8 +152,7 @@ class CNN(object):
 
             ##TODO calculating 1 useless thing, check notes #TODO
 
-            ##TESTING BATCH SIZE DIVISION
-            dJdW[i] /= self.batch_size
+
 
         return dJdW
 
@@ -161,7 +166,7 @@ class CNN(object):
             prediction = self.forward(self.X[0])
             loss1 = -np.sum(Y*np.log(prediction+epsilon))
 
-            e = 0.0001
+            e = 0.000001
             for r in range(R):
                 for d in range(D):
                     for h in range(H):
