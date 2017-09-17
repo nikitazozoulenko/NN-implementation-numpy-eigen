@@ -36,62 +36,69 @@ BN = Layer(function = "BN",
                    pad = None,
                    num_filters = None)
 
-lay1 = Layer(function = "convolution",
+conv_3_n1 = Layer(function = "convolution",
+                kernel_size = 3,
+                stride = 1,
+                pad = 0,
+                num_filters = 1)
+
+conv_3_n2 = Layer(function = "convolution",
+                kernel_size = 3,
+                stride = 1,
+                pad = 0,
+                num_filters = 2)
+
+conv_3_n4 = Layer(function = "convolution",
                 kernel_size = 3,
                 stride = 1,
                 pad = 0,
                 num_filters = 4)
 
-lay2 = Layer(function = "convolution",
-                kernel_size = 3,
-                stride = 1,
-                pad = 0,
-                num_filters = 4)
-
-lay3 = Layer(function = "convolution",
-                kernel_size = 4,
-                stride = 1,
-                pad = 0,
-                num_filters = 4)
-
-lay4 = Layer(function = "convolution",
-                kernel_size = 3,
-                stride = 2,
-                pad = 0,
-                num_filters = 4)
-
-lay5 = Layer(function = "maxpool",
-                kernel_size = 2,
-                stride = 2,
-                pad = 0,
-                num_filters = None)
-
-lay6 = Layer(function = "convolution",
+conv_3_n8 = Layer(function = "convolution",
                 kernel_size = 3,
                 stride = 1,
                 pad = 0,
                 num_filters = 8)
 
-lay7 = Layer(function = "convolution",
+conv_3_n16 = Layer(function = "convolution",
+                kernel_size = 3,
+                stride = 1,
+                pad = 0,
+                num_filters = 16)
+
+conv_3_n10 = Layer(function = "convolution",
                 kernel_size = 3,
                 stride = 1,
                 pad = 0,
                 num_filters = 10)
 
-layers = [BN,
-          lay1,
-          BN,
-          lay2,
-          BN,
-          lay3,
-          BN,
-          lay4,
-          BN,
-          lay5,
-          BN,
-          lay6,
-          BN,
-          lay7]
+conv_4_n8 = Layer(function = "convolution",
+                kernel_size = 4,
+                stride = 1,
+                pad = 0,
+                num_filters = 8)
+
+maxpool_k2s2 = Layer(function = "maxpool",
+                kernel_size = 2,
+                stride = 2,
+                pad = 0,
+                num_filters = None)
+
+layers =   [BN,
+            conv_3_n1,
+            conv_3_n1,
+            BN,
+            conv_3_n1,
+            conv_3_n1,
+            BN,
+            conv_3_n1,
+            conv_3_n1,
+            BN,
+            conv_3_n1,
+            maxpool_k2s2,
+            conv_3_n1,
+            conv_3_n1,
+            conv_3_n10]
 
 E_grad2 = [0]*(len(layers))
 E_x2 = [0]*(len(layers))
@@ -119,8 +126,8 @@ label_data = label_data[8:].reshape(60000, 1, 1, 1)
 losses = []
 
 #settings
-batch_size = 4
-epochs = 100
+batch_size = 2
+epochs = 1
 network = CNN(layers = layers, batch_size = batch_size, num_input_channels = image_data.shape[1],
               height = image_data.shape[2], width = image_data.shape[3])
 for i in range(epochs):
@@ -134,6 +141,12 @@ for i in range(epochs):
     prediction = network.forward(X)
     #backwards pass
     dJdW = network.backprop(prediction, Y)
+    TESTINGLAYER = 6
+    dJdW_num = network.compute_numerical_gradient(TESTINGLAYER, Y)
+    print(dJdW[TESTINGLAYER],"grad\n")
+    print(dJdW_num,"num\n")
+    print(dJdW_num.shape,"num\n")
+    print(dJdW[TESTINGLAYER]/dJdW_num,"test divide\n" )
     train_network(network=network, dJdW = dJdW, learning_rate = 0.0005, mu = 0.9)
 
     #Update Graph

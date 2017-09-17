@@ -41,7 +41,7 @@ def row2im(mat, W, delta_shape, stride = 1, pad = 0):
                     error = mat[r, d, h, w]
                     x[r:r+1, :, h*stride:W.shape[2]+h*stride, w*stride:W.shape[3]+w*stride] += W[d:d+1, :, :, :] * error
 
-    x = x.transpose(0,2,3,1).reshape(delta_shape)
+    x = x.transpose(0,3,2,1).reshape(delta_shape)
 
     #PAD HERE????
     return x
@@ -56,6 +56,7 @@ def row2im_indices(rows, x_shape, k_size=3, stride=1, pad = 0):
             for w in range(width_range):
                 #print(r*width_range**2+h*width_range+w)
                 x[r:r+1, :, h*stride:k_size+h*stride, w*stride:k_size+w*stride] += rows[r*width_range**2+h*width_range+w].reshape(D,k_size,k_size)
+    #x = x.transpose(0,1,3,2).reshape(R,D,H*W).transpose(0,2,1).reshape(R,D,H,W)
     return x
 
 def print_matrix(data, name):
