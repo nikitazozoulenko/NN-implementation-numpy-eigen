@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from layer import *
 from cnn import *
 from math_for_cnn import *
-from scipy.misc import imresize, toimage
 #from scipy import special, optimize
 
 epsilon = 0.00001

@@ -15,9 +15,10 @@ class CNN(object):
         self.X = [None]*(len(layers)+1)
         self.im2rowx = [None]*len(layers)
         self.pool_max_arg = [None]*len(layers)
-        self.deltas = [None]*len(layers)
         #WEIGHTS
         self.W = [None]*(len(layers))
+
+        self.deltas = [None]*(len(layers))
 
         last_n = num_input_channels
         last_h = height
@@ -57,22 +58,21 @@ class CNN(object):
 
         #math
         self.im2rowx[i] = im2row(self.X[i], size = self.layers[i].kernel_size, stride = self.layers[i].stride, pad = self.layers[i].pad)
-        y = np.dot(self.im2rowx[i], self.W[i].reshape(num_filters, kernel_D*kernel_H*kernel_W).T)
+        y = np.dot(self.im2rowx[i], self.W[i].T.reshape(( kernel_D*kernel_H*kernel_W , num_filters )))
         self.X[i+1] = y.reshape((out_R, out_H, out_W, out_D)).transpose(0, 3, 1, 2)
 
     def convolution_backprop(self, i, delta, dJdW):
-        k_size = self.layers[i].kernel_size
-        stride = self.layers[i].stride
-        pad = self.layers[i].pad
+        #flip 180 degrees
+        self.W[i] = self.W[i].transpose((0,1,3,2))
+
         num_filters, fD, fH, fW = self.W[i].shape
-
         delta_reshaped = delta.transpose(0,2,3,1).reshape(delta.shape[0]*delta.shape[2]*delta.shape[3], delta.shape[1])
-        dJdW[i] = np.dot(delta_reshaped.T,self.im2rowx[i]).reshape(self.W[i].shape)
+        dJdW[i] = np.dot(self.im2rowx[i].T, delta_reshaped).T.reshape(num_filters,fH,fW*fD).T.reshape(fH,fD,fW,num_filters).transpose(3,1,0,2)
+        delta = row2im(mat = delta, W = self.W[i], delta_shape = self.X[i].shape, stride = self.layers[i].stride, pad = self.layers[i].pad)
 
-        delta2_reshaped = delta.transpose(1, 2, 3, 0).reshape(num_filters, -1)
-        W_reshaped = self.W[i].reshape(num_filters, -1)
-        rows = np.dot(delta2_reshaped.T, W_reshaped)
-        delta = row2im_indices(rows, self.X[i].shape, k_size, stride, pad)
+        #unflip 180 degrees
+        self.W[i] = self.W[i].transpose((0,1,3,2))
+
         return delta
 
     def maxpool_forward(self, i):
@@ -99,13 +99,13 @@ class CNN(object):
         zeros = np.zeros((R*D*new_width**2, k_size**2))
         zeros[range(self.pool_max_arg[i].size), self.pool_max_arg[i]] = delta.ravel()
 
-        return row2im_indices_maxpool(rows = zeros, x_shape = (R * D, 1, H, W), k_size = k_size, stride = stride, pad = pad).reshape(R,D,H,W)
+        return row2im_indices(rows = zeros, x_shape = (R * D, 1, H, W), k_size = k_size, stride = stride, pad = pad).reshape(R,D,H,W)
 
     def BN_forward_train_time(self, i):
         x = self.X[i]
         gamma = self.W[i][0]
         beta = self.W[i][1]
-        R, D, W, H = x.shape
+        R, D, H, W = x.shape
 
         mean = np.mean(x, axis = (0,2,3)).reshape((1,D,1,1))
         variance = np.mean((x-mean)**2, axis = (0,2,3)).reshape((1,D,1,1))
@@ -119,27 +119,29 @@ class CNN(object):
 
     def BN_backprop(self, i, delta, dJdW):
         h = self.X[i]
-        R, D, W, H = h.shape
+        R, D, H, W = self.X[i].shape
 
-        dy = delta
         gamma = self.W[i][0]
         beta = self.W[i][1]
 
         gamma = gamma.reshape(1,D,1,1)
 
-        eps = 0
-        N = R
-        mu = 1./N/W/H*np.sum(h, axis = (0,2,3)).reshape(1,D,1,1)
-        var = 1./N/W/H*np.sum((h-mu)**2, axis = (0,2,3)).reshape(1,D,1,1)
-        dbeta = np.sum(dy, axis=(0,2,3)).reshape(1,D,1,1)
-        dgamma = np.sum((h - mu) * (var + eps)**(-1. / 2.) * dy, axis=(0,2,3)).reshape(1,D,1,1)
-        dh = (1. / N /W /H) * gamma * (var + eps)**(-1. / 2.) * (N*W*H * dy - np.sum(dy, axis=(0,2,3)).reshape(1,D,1,1)
-           - (h - mu) * (var + eps)**(-1.0) * np.sum(dy * (h - mu), axis=(0,2,3)).reshape(1,D,1,1))
+        eps = 0.000001
+        mu = (1./R/H/W)*np.sum(h, axis = (0,2,3)).reshape(1,D,1,1)
+        var = (1./R/H/W)*np.sum((h-mu)**2, axis = (0,2,3)).reshape(1,D,1,1)
+        #print("delta BN", delta)
+        dbeta = np.sum(delta, axis=(0,2,3)).reshape(1,D,1,1)
+        #print("sum", sum(sum(sum(sum(delta)))))
 
-        dJdW[i] = np.empty(self.W[i].shape)
+        dgamma = np.sum((h - mu) * (var + eps)**(-1. / 2.) * delta, axis=(0,2,3)).reshape(1,D,1,1)
+        dh = (1. / R /H /W) * gamma * (var + eps)**(-1. / 2.) * (R*H*W * delta - np.sum(delta, axis=(0,2,3)).reshape(1,D,1,1)
+           - (h - mu) * (var + eps)**(-1.0) * np.sum(delta * (h - mu), axis=(0,2,3)).reshape(1,D,1,1))
+
+        dJdW[i] = np.zeros(self.W[i].shape)
 
         dJdW[i][0] = dgamma
         dJdW[i][1] = dbeta
+        #print("dbeta",dbeta)
 
         return dh
 
@@ -183,7 +185,6 @@ class CNN(object):
         #loop for the rest of the layers
         for i in range((length-1), -1, -1):
             self.deltas[i] = delta
-            #print("i",i)
             if(self.layers[i].function is "convolution"):
                 delta = self.convolution_backprop(i,delta,dJdW)
 
@@ -209,9 +210,6 @@ class CNN(object):
 
             original_w = np.copy(self.W[i])
 
-            prediction = self.forward(self.X[0])
-            loss1 = -np.sum(Y*np.log(prediction+epsilon))/self.batch_size
-
             e = 0.000001
             for r in range(R):
                 for d in range(D):
@@ -221,8 +219,13 @@ class CNN(object):
                             weights[r,d,h,w] += e
                             self.set_weights(weights, i)
                             prediction = self.forward(self.X[0])
+                            loss1 = -np.sum(Y*np.log(prediction+epsilon))/self.batch_size
+
+                            weights[r,d,h,w] -= 2*e
+                            self.set_weights(weights, i)
+                            prediction = self.forward(self.X[0])
                             loss2 = -np.sum(Y*np.log(prediction+epsilon))/self.batch_size
-                            numerical_gradient[r,d,h,w] = (loss2 - loss1) / e
+                            numerical_gradient[r,d,h,w] = (loss1 - loss2) / (2*e)
 
             self.set_weights(original_w, i)
             return numerical_gradient

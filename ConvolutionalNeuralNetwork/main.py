@@ -3,15 +3,14 @@ import matplotlib.pyplot as plt
 from layer import *
 from cnn import *
 from math_for_cnn import *
-from scipy.misc import toimage, imresize
 #from scipy import special, optimize    #just if i need it in the future, this is kinda of a note for me
 
-#np.set_printoptions(threshold=np.nan)
+np.set_printoptions(threshold=np.nan)
 #np.seterr( over='ignore' )
 
 epsilon = 0.00001
 
-def show_loss(iteration, prediction, losses):
+def show_loss(losses):
     plt.plot(losses)
     plt.grid(1)
     plt.ylabel("Cost")
@@ -78,26 +77,33 @@ conv_4_n8 = Layer(function = "convolution",
                 pad = 0,
                 num_filters = 8)
 
+conv_2_n10 = Layer(function = "convolution",
+                kernel_size = 2,
+                stride = 1,
+                pad = 0,
+                num_filters = 10)
+
+conv_2_n1 = Layer(function = "convolution",
+                kernel_size = 2,
+                stride = 1,
+                pad = 0,
+                num_filters = 1)
+
 maxpool_k2s2 = Layer(function = "maxpool",
                 kernel_size = 2,
                 stride = 2,
                 pad = 0,
                 num_filters = None)
 
-layers =   [BN,
-            conv_3_n1,
-            conv_3_n1,
-            BN,
-            conv_3_n1,
-            conv_3_n1,
-            BN,
-            conv_3_n1,
-            conv_3_n1,
-            BN,
-            conv_3_n1,
+layers =   [
             maxpool_k2s2,
-            conv_3_n1,
-            conv_3_n1,
+            BN,
+            conv_3_n2,
+            conv_3_n2,
+            maxpool_k2s2,
+            BN,
+            conv_3_n4,
+            BN,
             conv_3_n10]
 
 E_grad2 = [0]*(len(layers))
@@ -126,10 +132,10 @@ label_data = label_data[8:].reshape(60000, 1, 1, 1)
 losses = []
 
 #settings
-batch_size = 2
-epochs = 1
-network = CNN(layers = layers, batch_size = batch_size, num_input_channels = image_data.shape[1],
-              height = image_data.shape[2], width = image_data.shape[3])
+batch_size = 8
+epochs = 400
+network = CNN(layers = layers, batch_size = batch_size, num_input_channels = image_data.shape[1], height = image_data.shape[2], width = image_data.shape[3])
+
 for i in range(epochs):
     #load data into the correct format (4D tensor)
     X = image_data[batch_size*i:batch_size*(i+1), 0:1] / float(255)
@@ -141,23 +147,19 @@ for i in range(epochs):
     prediction = network.forward(X)
     #backwards pass
     dJdW = network.backprop(prediction, Y)
-    TESTINGLAYER = 6
-    dJdW_num = network.compute_numerical_gradient(TESTINGLAYER, Y)
-    print(dJdW[TESTINGLAYER],"grad\n")
-    print(dJdW_num,"num\n")
-    print(dJdW_num.shape,"num\n")
-    print(dJdW[TESTINGLAYER]/dJdW_num,"test divide\n" )
-    train_network(network=network, dJdW = dJdW, learning_rate = 0.0005, mu = 0.9)
+    train_network(network=network, dJdW = dJdW, learning_rate = 0.005, mu = 0.9)
 
     #Update Graph
     loss = -sum(Y*np.log(prediction+epsilon))/network.batch_size
     losses.append(loss.mean())
 
-show_loss(i, prediction, losses)
+
+
+show_loss(losses)
 
 
 correct = 0
-max_i = 20
+max_i = 40
 #test network predictability rate
 for i in range(max_i):
     #load data into the correct format (4D tensor)
@@ -169,8 +171,12 @@ for i in range(max_i):
     #forward and backwards pass
     prediction = network.forward(X)
 
+
     #amount of correct answers
     correct += np.sum(np.equal(np.argmax(prediction, axis = 1), np.argmax(Y, axis = 1)))
+
+print("PREDICTION", prediction)
+print("Y", Y)
 
 print("TEST RESULTS:")
 print("correct:", correct)
