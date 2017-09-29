@@ -24,12 +24,12 @@
             network.v[j] = mu * network.v[j] - learning_rate * dJdW[j]
             network.W[j] += network.v[j]
 
-    def train_network(network, dJdW, learning_rate, mu):
-        #MOMENTUM
-        for j in range(len(layers)):
-            if(network.W[j] is not None):
-                network.v[j] = mu * network.v[j] - learning_rate * dJdW[j]
-                network.W[j] += network.v[j]
+def train_network(network, dJdW, learning_rate, mu):
+    #MOMENTUM
+    for j in range(len(layers)):
+        if(network.W[j] is not None):
+            v[j] = mu * v[j] - learning_rate * dJdW[j]
+            network.W[j] += v[j]
 
 def train_network(network, dJdW, learning_rate, mu):
     #ADADELTA
