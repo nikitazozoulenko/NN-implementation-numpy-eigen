@@ -2,8 +2,9 @@ import numpy as np
 from layer import *
 from math_for_cnn import *
 import itertools
+import pickle
 
-epsilon = 0.00001
+epsilon = 0.0001
 
 class CNN(object):
 
@@ -24,7 +25,8 @@ class CNN(object):
         self.BN_var = [None]*len(layers)
         self.mean_running_average = [None]*len(layers)
         self.var_running_average = [None]*len(layers)
-        self.deltas = [None]*len(layers)
+        self.deltas = [None]*(len(layers)+1)
+        self.dream_v = 0
 
         #init weights/layers
         last_n = num_input_channels
@@ -76,12 +78,13 @@ class CNN(object):
         y = np.dot(self.im2rowx[i], self.W[i].reshape(num_filters, kernel_D*kernel_H*kernel_W).T)
         self.X[i+1] = y.reshape((out_R, out_H, out_W, out_D)).transpose(0, 3, 1, 2)
 
-    def convolution_backprop(self, i, delta, dJdW):
+    def convolution_backprop(self, i, dJdW):
         #variables
         k_size = self.layers[i].kernel_size
         stride = self.layers[i].stride
         pad = self.layers[i].pad
         num_filters, fD, fH, fW = self.W[i].shape
+        delta = self.deltas[i+1]
 
         #derivative w.r.t weights
         delta_reshaped = delta.transpose(0,2,3,1).reshape(delta.shape[0]*delta.shape[2]*delta.shape[3], delta.shape[1])
@@ -91,7 +94,21 @@ class CNN(object):
         delta2_reshaped = delta.transpose(1, 2, 3, 0).reshape(num_filters, -1)
         W_reshaped = self.W[i].reshape(num_filters, -1)
         rows = np.dot(delta2_reshaped.T, W_reshaped)
-        return row2im_indices(rows, self.X[i].shape, k_size, stride, pad)
+        self.deltas[i] = row2im_indices(rows, self.X[i].shape, k_size, stride, pad)
+
+    def convolution_dream(self, i):
+        #variables
+        k_size = self.layers[i].kernel_size
+        stride = self.layers[i].stride
+        pad = self.layers[i].pad
+        num_filters, fD, fH, fW = self.W[i].shape
+        delta = self.deltas[i+1]
+
+        #derivative w.r.t input
+        delta2_reshaped = delta.transpose(1, 2, 3, 0).reshape(num_filters, -1)
+        W_reshaped = self.W[i].reshape(num_filters, -1)
+        rows = np.dot(delta2_reshaped.T, W_reshaped)
+        self.deltas[i] = row2im_indices(rows, self.X[i].shape, k_size, stride, pad)
 
     def maxpool_forward(self, i):
         #variables
@@ -108,18 +125,22 @@ class CNN(object):
         self.pool_max_arg[i] = np.argmax(im2row_pool, axis = 1)
         self.X[i+1] = im2row_pool[range(self.pool_max_arg[i].size), self.pool_max_arg[i]].reshape(R, D, new_width, new_width)
 
-    def maxpool_backprop(self, i, delta, dJdW):
+    def maxpool_backprop(self, i):
         #variables
         R, D, H, W = self.X[i].shape
         k_size = self.layers[i].kernel_size
         stride = self.layers[i].stride
         pad = self.layers[i].pad
         new_width = int((W+pad*2-k_size)/stride + 1)
+        delta = self.deltas[i+1]
 
         #derivative w.r.t input
         zeros = np.zeros((R*D*new_width**2, k_size**2))
         zeros[range(self.pool_max_arg[i].size), self.pool_max_arg[i]] = delta.ravel()
-        return row2im_indices_maxpool(rows = zeros, x_shape = (R * D, 1, H, W), k_size = k_size, stride = stride, pad = pad).reshape(R,D,H,W)
+        self.deltas[i] = row2im_indices_maxpool(rows = zeros, x_shape = (R * D, 1, H, W), k_size = k_size, stride = stride, pad = pad).reshape(R,D,H,W)
+
+    def maxpool_dream(self, i):
+        self.maxpool_backprop(i)
 
     def BN_forward_train_time(self, i):
         #variables
@@ -154,27 +175,36 @@ class CNN(object):
         xhat = (x-mean) / np.sqrt(variance + epsilon)
         self.X[i+1] = gamma * xhat + beta
 
-    def BN_backprop(self, i, delta, dJdW):
+    def BN_backprop(self, i, dJdW):
         #variables
-        h = self.X[i]
-        R, D, W, H = h.shape
+        R, D, W, H = self.X[i].shape
         gamma = self.W[i][0].reshape(1,D,1,1)
         beta = self.W[i][1]
         mean = self.BN_mean[i]
         var = self.BN_var[i]
+        delta = self.deltas[i+1]
 
         #derivatives
         dgammadx = np.sum((delta - mean) / np.sqrt(var+epsilon) * delta, axis=(0,2,3)).reshape(1,D,1,1)
         dbetadx = np.sum(delta, axis=(0,2,3)).reshape(1,D,1,1)
-        new_delta = gamma / (R*W*H) / np.sqrt(var+epsilon) * ((R*W*H) * delta - np.sum(delta, axis=(0,2,3)).reshape(1,D,1,1)
+        self.deltas[i] = gamma / (R*W*H) / np.sqrt(var+epsilon) * ((R*W*H) * delta - np.sum(delta, axis=(0,2,3)).reshape(1,D,1,1)
             - (delta - mean) / (var+epsilon) * np.sum(delta * (delta - mean), axis=(0,2,3)).reshape(1,D,1,1))
 
         dJdW[i] = np.empty(self.W[i].shape)
         dJdW[i][0] = dgammadx
         dJdW[i][1] = dbetadx
-        return new_delta
+
+    def BN_dream(self, i):
+        R, D, W, H = self.X[i].shape
+        gamma = self.W[i][0].reshape(1,D,1,1)
+        mean = self.mean_running_average[i]
+        var = self.var_running_average[i]
+        delta = self.deltas[i+1]
+        self.deltas[i] = gamma / (R*W*H) / np.sqrt(var+epsilon) * ((R*W*H) * delta - np.sum(delta, axis=(0,2,3)).reshape(1,D,1,1)
+            - (delta - mean) / (var+epsilon) * np.sum(delta * (delta - mean), axis=(0,2,3)).reshape(1,D,1,1))
 
     def forward_single_layer(self, i, BN_function):
+        #forward layer i
         function = self.layers[i].function
         if(function is "convolution"):
             self.convolution_forward(i)
@@ -190,18 +220,15 @@ class CNN(object):
 
         elif(function is "tanh"):
             self.X[i+1] = tanh(self.X[i])
+        #Enable the print to easily create a new architecture
         #print(self.X[i+1].shape)
 
-    def forward(self, input_matrix):
+    def forward(self, input_matrix, time = "train"):
         self.X[0] = input_matrix
+        if time == "train": BN_function = self.BN_forward_train_time
+        else: BN_function = self.BN_forward_test_time
         for i in range(len(self.layers)):
-            self.forward_single_layer(i, BN_function = self.BN_forward_train_time)
-        return softmax(self.X[len(self.layers)])
-
-    def forward_test_time(self, input_matrix):
-        self.X[0] = input_matrix
-        for i in range(len(self.layers)):
-            self.forward_single_layer(i, BN_function = self.BN_forward_test_time)
+            self.forward_single_layer(i, BN_function = BN_function)
         return softmax(self.X[len(self.layers)])
 
     def backprop(self, prediction, actual_value):
@@ -209,30 +236,66 @@ class CNN(object):
         dJdW = [None]*(length)
 
         #hardcoded softmax
-        delta = (prediction - actual_value) /self.batch_size
+        self.deltas[length] = (prediction - actual_value) /self.batch_size
 
         #loop for the rest of the layers
         for i in range((length-1), -1, -1):
-            #self.deltas for the numerical gradients
-            self.deltas[i] = delta
-
             if(self.layers[i].function is "convolution"):
-                delta = self.convolution_backprop(i,delta,dJdW)
+                self.convolution_backprop(i,dJdW)
 
             elif(self.layers[i].function is "BN"):
-                delta = self.BN_backprop(i,delta,dJdW)
+                self.BN_backprop(i,dJdW)
 
             elif(self.layers[i].function is "maxpool"):
-                delta = self.maxpool_backprop(i,delta,dJdW)
+                self.maxpool_backprop(i)
 
             elif(self.layers[i].function is "ReLU"):
-                delta = delta * relu_prime(self.X[i])
+                self.deltas[i] = self.deltas[i+1] * relu_prime(self.X[i])
 
             elif(self.layers[i].function is "tanh"):
-                delta = delta * tanh_prime(self.X[i])
+                self.deltas[i] = self.deltas[i+1] * tanh_prime(self.X[i])
 
-        ##TODO calculating 1 useless thing: dx1dx0, check notes #TODO
         return dJdW
+
+    def forward_partial(self, input_matrix, end):
+        self.X[0] = input_matrix
+        BN_function = self.BN_forward_test_time
+        for i in range(end):
+            self.forward_single_layer(i, BN_function = BN_function)
+        return self.X[end]
+
+    def backprop_partial(self, start):
+        for i in range((start-1), -1, -1):
+            if(self.layers[i].function is "convolution"):
+                self.convolution_dream(i)
+
+            elif(self.layers[i].function is "BN"):
+                self.BN_dream(i)
+
+            elif(self.layers[i].function is "maxpool"):
+                self.maxpool_dream(i)
+
+            elif(self.layers[i].function is "ReLU"):
+                self.deltas[i] = self.deltas[i+1] * relu_prime(self.X[i])
+
+            elif(self.layers[i].function is "tanh"):
+                self.deltas[i] = self.deltas[i+1] * tanh_prime(self.X[i])
+
+    def make_step(self, image, end):
+        lastimage = image
+        self.forward_partial(image, end = end)
+        self.deltas[end] = self.X[end]
+        self.backprop_partial(start = end)
+        image = self.dream_optimize_step(image, self.deltas[0])
+        return image
+
+    def dream_optimize_step(self, image, delta):
+        #MOMENTUM on image
+        learning_rate = 0.01
+        mu = 0.9
+        self.dream_v = mu * self.dream_v - learning_rate * delta
+        image += self.dream_v
+        return image
 
     def compute_numerical_gradient(self, i, Y): #i = the i:th layer,, see my personal cnn model
         if self.W[i] is not None:
@@ -293,3 +356,24 @@ class CNN(object):
                         self.X[i+1][r,d,h,w] -=e
 
         return numerical_gradient
+
+    def save_with_pickle(self, destination = None):
+        cache = {}
+        #cache["layers"] = self.layers
+        cache["batch_size"] = self.batch_size
+        cache["W"] = self.W
+        cache["mean_running_average"] = self.mean_running_average
+        cache["var_running_average"] = self.var_running_average
+        cache["deltas"] = self.deltas
+
+        pickle.dump(cache, open(destination, "wb"))
+
+    def load_from_pickle(self, filename = None):
+        cache = pickle.load(open(filename, "rb"))
+
+        #self.layers=layers = cache["layers"]
+        self.batch_size = cache["batch_size"]
+        self.W = cache["W"]
+        self.mean_running_average = cache["mean_running_average"]
+        self.var_running_average = cache["var_running_average"]
+        self.deltas = cache["deltas"]

@@ -17,7 +17,7 @@
 
 
     #MOMENTUM
-    learning_rate = 0.01
+    learning_rate = 0.05
     mu = 0.95
     for j in range(len(layers)):
         if(network.W[j] is not None):
