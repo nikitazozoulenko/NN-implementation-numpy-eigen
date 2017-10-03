@@ -281,21 +281,12 @@ class CNN(object):
             elif(self.layers[i].function is "tanh"):
                 self.deltas[i] = self.deltas[i+1] * tanh_prime(self.X[i])
 
-    def make_step(self, image, end):
+    def dream_gradient(self, image, end):
         lastimage = image
         self.forward_partial(image, end = end)
         self.deltas[end] = self.X[end]
         self.backprop_partial(start = end)
-        image = self.dream_optimize_step(image, self.deltas[0])
-        return image
-
-    def dream_optimize_step(self, image, delta):
-        #MOMENTUM on image
-        learning_rate = 0.01
-        mu = 0.9
-        self.dream_v = mu * self.dream_v - learning_rate * delta
-        image += self.dream_v
-        return image
+        return self.deltas[0]
 
     def compute_numerical_gradient(self, i, Y): #i = the i:th layer,, see my personal cnn model
         if self.W[i] is not None:
